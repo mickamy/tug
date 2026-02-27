@@ -1,10 +1,11 @@
-package compose
+package override
 
 import (
 	"fmt"
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/mickamy/tug/internal/compose"
 	"github.com/mickamy/tug/internal/config"
 	"github.com/mickamy/tug/internal/port"
 	"github.com/mickamy/tug/internal/traefik"
@@ -31,7 +32,7 @@ const (
 
 // ClassifiedService holds a service with its classification and resolved port info.
 type ClassifiedService struct {
-	Service
+	compose.Service
 
 	Kind          ServiceKind
 	HostPort      uint16 // assigned host port for TCP services
@@ -40,7 +41,7 @@ type ClassifiedService struct {
 
 // Classify categorizes each service as HTTP or TCP.
 // Priority: config override > well-known container port detection.
-func Classify(proj Project, cfg config.Config) ([]ClassifiedService, error) {
+func Classify(proj compose.Project, cfg config.Config) ([]ClassifiedService, error) {
 	used := make(map[uint16]struct{})
 	res := make([]ClassifiedService, len(proj.Services))
 
@@ -65,7 +66,7 @@ func Classify(proj Project, cfg config.Config) ([]ClassifiedService, error) {
 }
 
 // detectKind checks config overrides first, then falls back to well-known port detection.
-func detectKind(svc Service, cfg config.Config) (ServiceKind, uint16) {
+func detectKind(svc compose.Service, cfg config.Config) (ServiceKind, uint16) {
 	if sc, ok := cfg.Services[svc.Name]; ok {
 		switch sc.Kind {
 		case "tcp":
@@ -87,9 +88,9 @@ func detectKind(svc Service, cfg config.Config) (ServiceKind, uint16) {
 	return KindHTTP, 0
 }
 
-// GenerateOverride produces the override YAML for the given project and classified services.
+// Generate produces the override YAML for the given project and classified services.
 // HTTP services get Traefik labels; TCP services get deterministic port remapping.
-func GenerateOverride(proj Project, services []ClassifiedService) ([]byte, error) {
+func Generate(proj compose.Project, services []ClassifiedService) ([]byte, error) {
 	override := map[string]any{
 		"services": buildServices(proj.Name, services),
 	}
