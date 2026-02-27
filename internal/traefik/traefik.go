@@ -26,9 +26,9 @@ func EnsureNetwork(ctx context.Context, runner exec.Runner) error {
 		return nil
 	}
 	// Distinguish "not found" from other failures (e.g. Docker unavailable).
-	// The error message varies by Docker version, so check the output too.
+	// Check both the error and combined output, as the message location varies by Docker version.
 	msg := err.Error() + " " + string(out)
-	if !strings.Contains(msg, "not found") && !strings.Contains(msg, "No such network") {
+	if !strings.Contains(msg, "No such network") {
 		return fmt.Errorf("inspecting network: %w", err)
 	}
 	if err := runner.Runtime(ctx, "network", "create", networkName); err != nil {
