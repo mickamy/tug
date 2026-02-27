@@ -136,7 +136,7 @@ func buildHTTPService(projectName string, cs ClassifiedService) map[string]any {
 
 	return map[string]any{
 		"labels":   traefik.Labels(projectName, cs.Name, containerPort),
-		"networks": []string{"tug"},
+		"networks": []string{traefik.NetworkName()},
 	}
 }
 
