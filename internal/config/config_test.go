@@ -110,6 +110,48 @@ func TestLoad_ServiceOverrides(t *testing.T) {
 	}
 }
 
+func TestLoad_ServiceConfigMerge(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	globalPath := filepath.Join(dir, "global.yaml")
+	// Global: db has kind=tcp and port overrides.
+	if err := os.WriteFile(
+		globalPath,
+		[]byte("services:\n  db:\n    kind: tcp\n    ports:\n      5432: tcp\n      8080: http\n"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	localDir := filepath.Join(dir, "project")
+	if err := os.MkdirAll(localDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	// Local: db overrides kind only; ports should be preserved from global.
+	if err := os.WriteFile(
+		filepath.Join(localDir, ".tug.yaml"),
+		[]byte("services:\n  db:\n    kind: http\n"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.Load(localDir, globalPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Services["db"].Kind != "http" {
+		t.Errorf("kind: got %q, want %q", cfg.Services["db"].Kind, "http")
+	}
+	if cfg.Services["db"].Ports[5432] != "tcp" {
+		t.Errorf("port 5432: got %q, want %q", cfg.Services["db"].Ports[5432], "tcp")
+	}
+	if cfg.Services["db"].Ports[8080] != "http" {
+		t.Errorf("port 8080: got %q, want %q", cfg.Services["db"].Ports[8080], "http")
+	}
+}
+
 func TestLoad_PortOverrides(t *testing.T) {
 	t.Parallel()
 

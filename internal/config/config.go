@@ -128,6 +128,16 @@ func merge(base *Config, override Config) {
 		if base.Services == nil {
 			base.Services = make(map[string]ServiceConfig)
 		}
-		base.Services[name] = svc
+		existing := base.Services[name]
+		if svc.Kind != "" {
+			existing.Kind = svc.Kind
+		}
+		for p, k := range svc.Ports {
+			if existing.Ports == nil {
+				existing.Ports = make(map[uint16]string)
+			}
+			existing.Ports[p] = k
+		}
+		base.Services[name] = existing
 	}
 }
