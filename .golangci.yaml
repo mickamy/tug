@@ -1,0 +1,54 @@
+version: "2"
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/mickamy/tug
+
+linters:
+  default: all
+  settings:
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+    tagliatelle:
+      case:
+        rules:
+          json: snake
+  disable:
+    - cyclop           # Redundant; cognitive complexity is already tracked by gocognit
+    - depguard         # Import restrictions are not currently required for this internal architecture
+    - dogsled          # Multiple blank identifiers are unavoidable with some stdlib functions (e.g. runtime.Caller)
+    - dupl             # High false-positive rate in test suites where setup code is similar
+    - err113           # Sentinel errors are used where meaningful; contextual fmt.Errorf is preferred elsewhere
+    - exhaustruct      # Hinders use of default values; too boilerplate-heavy for large structs
+    - forbidigo        # Essential for CLI tools that rely on fmt.Print for user output
+    - funlen           # Testing logic and table-driven tests naturally exceed standard length
+    - gochecknoglobals # Necessary for certain package-level configurations or singleton patterns
+    - gochecknoinits   # Required for specific library registrations and setup hooks
+    - gocognit         # Thresholds are often too low for complex but necessary business logic
+    - goconst          # Repeated strings in tests are clearer than abstract constants
+    - godot            # Punctuation in comments is a stylistic choice, not a code quality issue
+    - gomoddirectives  # Local replace directives are needed for the example module
+    - ireturn          # Returning interfaces is a valid design pattern in this project's architecture
+    - mnd              # "Magic numbers" are often self-explanatory (e.g., status codes, time units)
+    - nestif           # Deep nesting is sometimes the most readable way to handle complex logic
+    - nlreturn         # Forcing newlines before returns is purely stylistic and often disruptive
+    - noinlineerr      # Inline error handling (if err := ...; err != nil) is idiomatic Go
+    - nonamedreturns   # Named returns improve documentation and clarity for complex signatures
+    - recvcheck        # Value receivers are preferred when the receiver is not mutated
+    - revive           # Most rules are already covered by more specialized linters
+    - thelper          # Main value (begin check) conflicts with table-driven test closures; remaining checks are trivial
+    - varnamelen       # Short, idiomatic names (i, k, v) are preferred in concise Go code
+    - wsl              # Excessive whitespace enforcement often degrades code density and readability
+    - wsl_v5           # Same as wsl; v5 variant also enforces excessive whitespace rules
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

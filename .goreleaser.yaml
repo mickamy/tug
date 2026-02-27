@@ -1,0 +1,37 @@
+version: 2
+
+release:
+  mode: replace
+
+builds:
+  - id: tug
+    main: .
+    binary: tug
+    ldflags:
+      - -X main.version={{.Version}}
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - ids:
+      - tug
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+brews:
+  - name: tug
+    homepage: https://github.com/mickamy/tug
+    description: Replace port conflicts with stable, named URLs for Docker Compose. For humans and agents.
+    install: |
+      bin.install "tug"
+    repository:
+      owner: mickamy
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+
+changelog: {}
