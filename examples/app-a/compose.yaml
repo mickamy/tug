@@ -1,4 +1,4 @@
-name: tug-example
+name: app-a
 
 services:
   api:
