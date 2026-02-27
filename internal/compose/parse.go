@@ -1,6 +1,7 @@
 package compose
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -45,8 +46,39 @@ type composeFile struct {
 }
 
 type composeService struct {
-	Image string   `yaml:"image"`
-	Ports []string `yaml:"ports"`
+	Image string      `yaml:"image"`
+	Ports portEntries `yaml:"ports"`
+}
+
+// portEntries unmarshals both short ("8080:8080") and long
+// ({target: 8080, published: "8080", …}) Docker Compose port syntax.
+type portEntries []Port
+
+func (pe *portEntries) UnmarshalYAML(value *yaml.Node) error {
+	if value.Kind != yaml.SequenceNode {
+		return errors.New("ports: expected sequence")
+	}
+	for _, node := range value.Content {
+		p, ok, err := parsePortNode(node)
+		if err != nil {
+			return err
+		}
+		if ok {
+			*pe = append(*pe, p)
+		}
+	}
+	return nil
+}
+
+func parsePortNode(node *yaml.Node) (Port, bool, error) {
+	switch node.Kind { //nolint:exhaustive // only scalar and mapping are valid port nodes
+	case yaml.ScalarNode:
+		return parseShortPort(node.Value)
+	case yaml.MappingNode:
+		return parseLongPort(node)
+	default:
+		return Port{}, false, fmt.Errorf("unexpected port node kind: %d", node.Kind)
+	}
 }
 
 // FindComposeFile returns the path of the first compose file found in dir.
@@ -67,6 +99,11 @@ func Parse(path string) (Project, error) {
 		return Project{}, fmt.Errorf("reading compose file: %w", err)
 	}
 
+	return ParseBytes(data)
+}
+
+// ParseBytes parses compose YAML from raw bytes.
+func ParseBytes(data []byte) (Project, error) {
 	var cf composeFile
 	if err := yaml.Unmarshal(data, &cf); err != nil {
 		return Project{}, fmt.Errorf("parsing compose file: %w", err)
@@ -82,29 +119,20 @@ func Parse(path string) (Project, error) {
 
 	for _, name := range names {
 		svc := cf.Services[name]
-		s := Service{
+		proj.Services = append(proj.Services, Service{
 			Name:  name,
 			Image: svc.Image,
-		}
-		for _, raw := range svc.Ports {
-			p, ok, err := parsePort(raw)
-			if err != nil {
-				return Project{}, fmt.Errorf("service %s: %w", name, err)
-			}
-			if ok {
-				s.Ports = append(s.Ports, p)
-			}
-		}
-		proj.Services = append(proj.Services, s)
+			Ports: svc.Ports,
+		})
 	}
 
 	return proj, nil
 }
 
-// parsePort parses port strings in Docker Compose short syntax.
+// parseShortPort parses port strings in Docker Compose short syntax.
 // Returns (port, true, nil) for mappings with a host port,
 // or (Port{}, false, nil) for container-only ports (e.g. "8080") which tug skips.
-func parsePort(raw string) (Port, bool, error) {
+func parseShortPort(raw string) (Port, bool, error) {
 	parts := strings.Split(raw, ":")
 	switch len(parts) {
 	case 1:
@@ -141,4 +169,29 @@ func stripProto(s string) string {
 		return before
 	}
 	return s
+}
+
+// parseLongPort handles the Docker Compose long syntax:
+//
+//	target: 8080
+//	published: "8080"
+//	protocol: tcp
+//
+// published may be a YAML string or integer depending on the Compose version.
+func parseLongPort(node *yaml.Node) (Port, bool, error) {
+	var lp struct {
+		Target    uint16 `yaml:"target"`
+		Published string `yaml:"published"`
+	}
+	if err := node.Decode(&lp); err != nil {
+		return Port{}, false, fmt.Errorf("parsing long port syntax: %w", err)
+	}
+	if lp.Published == "" || lp.Target == 0 {
+		return Port{}, false, nil
+	}
+	pub, err := strconv.ParseUint(lp.Published, 10, 16)
+	if err != nil {
+		return Port{}, false, fmt.Errorf("invalid published port %q: %w", lp.Published, err)
+	}
+	return Port{Host: uint16(pub), Container: lp.Target}, true, nil
 }
