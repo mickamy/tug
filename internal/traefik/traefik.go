@@ -21,12 +21,14 @@ func NetworkName() string {
 
 // EnsureNetwork creates the tug Docker network if it does not exist.
 func EnsureNetwork(ctx context.Context, runner exec.Runner) error {
-	_, err := runner.RuntimeOutput(ctx, "network", "inspect", networkName)
+	out, err := runner.RuntimeOutput(ctx, "network", "inspect", networkName)
 	if err == nil {
 		return nil
 	}
 	// Distinguish "not found" from other failures (e.g. Docker unavailable).
-	if !strings.Contains(err.Error(), "No such network") {
+	// The error message varies by Docker version, so check the output too.
+	msg := err.Error() + " " + string(out)
+	if !strings.Contains(msg, "not found") && !strings.Contains(msg, "No such network") {
 		return fmt.Errorf("inspecting network: %w", err)
 	}
 	if err := runner.Runtime(ctx, "network", "create", networkName); err != nil {
