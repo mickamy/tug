@@ -90,7 +90,7 @@ func Load(projectDir, globalPath string) (Config, error) {
 }
 
 // LoadDefault loads config using the current directory and the standard
-// global config path (~/.config/.tug.yaml).
+// global config path (~/.config/tug.yaml).
 func LoadDefault() (Config, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -99,7 +99,7 @@ func LoadDefault() (Config, error) {
 
 	var globalPath string
 	if home, err := os.UserHomeDir(); err == nil {
-		globalPath = filepath.Join(home, ".config", ".tug.yaml")
+		globalPath = filepath.Join(home, ".config", "tug.yaml")
 	}
 
 	return Load(cwd, globalPath)
