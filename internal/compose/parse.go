@@ -124,13 +124,21 @@ func parsePort(raw string) (Port, bool, error) {
 }
 
 func parsePair(hostStr, containerStr string) (Port, error) {
-	host, err := strconv.ParseUint(hostStr, 10, 16)
+	host, err := strconv.ParseUint(stripProto(hostStr), 10, 16)
 	if err != nil {
 		return Port{}, fmt.Errorf("invalid host port %q: %w", hostStr, err)
 	}
-	container, err := strconv.ParseUint(containerStr, 10, 16)
+	container, err := strconv.ParseUint(stripProto(containerStr), 10, 16)
 	if err != nil {
 		return Port{}, fmt.Errorf("invalid container port %q: %w", containerStr, err)
 	}
 	return Port{Host: uint16(host), Container: uint16(container)}, nil
+}
+
+// stripProto removes an optional "/tcp" or "/udp" suffix from a port string.
+func stripProto(s string) string {
+	if i := strings.Index(s, "/"); i >= 0 {
+		return s[:i]
+	}
+	return s
 }

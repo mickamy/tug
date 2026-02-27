@@ -159,6 +159,39 @@ services:
 	}
 }
 
+func TestParse_PortWithProtocol(t *testing.T) {
+	t.Parallel()
+
+	content := `name: myapp
+services:
+  web:
+    image: nginx
+    ports:
+      - "3000:3000/tcp"
+      - "5000:5000/udp"
+`
+	dir := t.TempDir()
+	path := filepath.Join(dir, "compose.yaml")
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	proj, err := compose.Parse(path)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(proj.Services[0].Ports) != 2 {
+		t.Fatalf("ports: got %d, want 2", len(proj.Services[0].Ports))
+	}
+	if proj.Services[0].Ports[0].Container != 3000 {
+		t.Errorf("first port: got %d, want 3000", proj.Services[0].Ports[0].Container)
+	}
+	if proj.Services[0].Ports[1].Container != 5000 {
+		t.Errorf("second port: got %d, want 5000", proj.Services[0].Ports[1].Container)
+	}
+}
+
 func TestParse_InvalidPort(t *testing.T) {
 	t.Parallel()
 
