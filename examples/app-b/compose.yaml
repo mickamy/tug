@@ -1,0 +1,19 @@
+name: app-b
+
+services:
+  api:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: password
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"

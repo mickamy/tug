@@ -185,7 +185,12 @@ func buildService(projectName string, cs ClassifiedService) map[string]any {
 			})
 		}
 	}
-	if len(tcpEntries) > 0 {
+	// Always emit ports !override when the base compose has ports, so that
+	// original host-port bindings (especially for HTTP services routed through
+	// Traefik) are replaced rather than merged.
+	// For HTTP-only services this produces an empty !override sequence,
+	// effectively stripping all host ports.
+	if len(tcpEntries) > 0 || (hasHTTP && len(cs.Ports) > 0) {
 		svc["ports"] = tcpEntries
 	}
 
