@@ -22,7 +22,8 @@ type Command struct {
 
 // ServiceConfig holds per-service overrides.
 type ServiceConfig struct {
-	Kind string `yaml:"kind"` // "http" or "tcp"
+	Kind  string            `yaml:"kind"`  // default kind: "http" or "tcp"
+	Ports map[uint16]string `yaml:"ports"` // per-port kind override: containerPort → "http" | "tcp"
 }
 
 var validKinds = map[string]struct{}{
@@ -39,6 +40,11 @@ func (s *ServiceConfig) UnmarshalYAML(unmarshal func(any) error) error {
 	}
 	if _, ok := validKinds[v.Kind]; !ok {
 		return fmt.Errorf("invalid service kind %q (must be \"http\" or \"tcp\")", v.Kind)
+	}
+	for p, k := range v.Ports {
+		if _, ok := validKinds[k]; !ok || k == "" {
+			return fmt.Errorf("invalid kind %q for port %d (must be \"http\" or \"tcp\")", k, p)
+		}
 	}
 	*s = ServiceConfig(v)
 	return nil
