@@ -1,7 +1,6 @@
 package traefik
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"strings"
@@ -37,20 +36,16 @@ func EnsureRunning(ctx context.Context, runner exec.Runner) error {
 		return fmt.Errorf("ensuring network: %w", err)
 	}
 
-	out, _ := runner.RuntimeOutput(ctx,
+	out, err := runner.RuntimeOutput(ctx,
 		"inspect", "-f", "{{.State.Running}}",
 		containerName,
 	)
-	if strings.TrimSpace(string(out)) == "true" {
+	if err == nil && strings.TrimSpace(string(out)) == "true" {
 		return nil
 	}
 
-	// Remove stopped container if it exists.
-	existsOut, _ := runner.RuntimeOutput(ctx,
-		"inspect", "-f", "{{.Name}}",
-		containerName,
-	)
-	if len(bytes.TrimSpace(existsOut)) > 0 {
+	// Remove stopped/dead container if it exists (inspect succeeded but not running).
+	if err == nil {
 		_ = runner.Runtime(ctx, "rm", "-f", containerName)
 	}
 
