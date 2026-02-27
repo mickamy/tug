@@ -22,7 +22,7 @@ var tcpPorts = map[uint16]struct{}{
 	27017: {}, // mongo
 }
 
-// ServiceKind indicates how tug should handle a service.
+// ServiceKind indicates how tug should handle a port.
 type ServiceKind int
 
 const (
@@ -41,65 +41,87 @@ func (k ServiceKind) String() string {
 	}
 }
 
-// ClassifiedService holds a service with its classification and resolved port info.
+// ClassifiedPort holds a single port with its classification and resolved host port.
+type ClassifiedPort struct {
+	ContainerPort uint16
+	Kind          ServiceKind
+	HostPort      uint16 // assigned host port (TCP only)
+}
+
+// ClassifiedService holds a service with per-port classification.
 type ClassifiedService struct {
 	compose.Service
 
-	Kind          ServiceKind
-	HostPort      uint16 // assigned host port for TCP services
-	ContainerPort uint16 // well-known container port for TCP services
+	ClassifiedPorts []ClassifiedPort
 }
 
-// Classify categorizes each service as HTTP or TCP.
-// Priority: config override > well-known container port detection.
+// Classify categorizes each port of each service as HTTP or TCP.
+// Priority: config port override > config service-level kind > well-known port detection > HTTP default.
 func Classify(proj compose.Project, cfg config.Config) ([]ClassifiedService, error) {
 	used := make(map[uint16]struct{})
 	res := make([]ClassifiedService, len(proj.Services))
 
 	for i, svc := range proj.Services {
-		kind, cp := detectKind(svc, cfg)
-		res[i] = ClassifiedService{
-			Service:       svc,
-			Kind:          kind,
-			ContainerPort: cp,
-		}
-		if kind == KindTCP && cp > 0 {
-			hp, err := port.Compute(proj.Name, svc.Name, cp, used)
-			if err != nil {
-				return nil, fmt.Errorf("service %s: %w", svc.Name, err)
+		cps := classifyPorts(svc, cfg)
+		for j, cp := range cps {
+			if cp.Kind == KindTCP && cp.ContainerPort > 0 {
+				hp, err := port.Compute(proj.Name, svc.Name, cp.ContainerPort, used)
+				if err != nil {
+					return nil, fmt.Errorf("service %s port %d: %w", svc.Name, cp.ContainerPort, err)
+				}
+				cps[j].HostPort = hp
+				used[hp] = struct{}{}
 			}
-			res[i].HostPort = hp
-			used[hp] = struct{}{}
 		}
+		res[i] = ClassifiedService{Service: svc, ClassifiedPorts: cps}
 	}
 
 	return res, nil
 }
 
-// detectKind checks config overrides first, then falls back to well-known port detection.
-func detectKind(svc compose.Service, cfg config.Config) (ServiceKind, uint16) {
-	if sc, ok := cfg.Services[svc.Name]; ok {
-		switch sc.Kind {
-		case "tcp":
-			if len(svc.Ports) > 0 {
-				return KindTCP, svc.Ports[0].Container
-			}
-			return KindTCP, 0
-		case "http":
-			return KindHTTP, 0
-		}
+// classifyPorts determines the kind of each port in a service.
+func classifyPorts(svc compose.Service, cfg config.Config) []ClassifiedPort {
+	sc := cfg.Services[svc.Name]
+
+	if len(svc.Ports) == 0 {
+		return []ClassifiedPort{{Kind: KindHTTP}}
 	}
 
-	for _, p := range svc.Ports {
-		if _, ok := tcpPorts[p.Container]; ok {
-			return KindTCP, p.Container
+	cps := make([]ClassifiedPort, len(svc.Ports))
+	for i, p := range svc.Ports {
+		cps[i] = ClassifiedPort{
+			ContainerPort: p.Container,
+			Kind:          detectPortKind(p.Container, sc),
 		}
 	}
-	return KindHTTP, 0
+	return cps
+}
+
+// detectPortKind determines the kind for a single port.
+// Priority: config port override > config service kind > well-known port > HTTP default.
+func detectPortKind(containerPort uint16, sc config.ServiceConfig) ServiceKind {
+	if k, ok := sc.Ports[containerPort]; ok {
+		if k == "tcp" {
+			return KindTCP
+		}
+		return KindHTTP
+	}
+
+	if sc.Kind == "tcp" {
+		return KindTCP
+	}
+	if sc.Kind == "http" {
+		return KindHTTP
+	}
+
+	if _, ok := tcpPorts[containerPort]; ok {
+		return KindTCP
+	}
+	return KindHTTP
 }
 
 // Generate produces the override YAML for the given project and classified services.
-// HTTP services get Traefik labels + tug network; TCP services get deterministic port
+// HTTP ports get Traefik labels + tug network; TCP ports get deterministic port
 // remapping with !override to replace (not append) the original ports.
 func Generate(proj compose.Project, services []ClassifiedService) ([]byte, error) {
 	root := map[string]any{
@@ -122,44 +144,48 @@ func buildServices(projectName string, services []ClassifiedService) map[string]
 	svcMap := make(map[string]any, len(services))
 
 	for _, cs := range services {
-		switch cs.Kind {
-		case KindHTTP:
-			svcMap[cs.Name] = buildHTTPService(projectName, cs)
-		case KindTCP:
-			svcMap[cs.Name] = buildTCPService(cs)
-		}
+		svcMap[cs.Name] = buildService(projectName, cs)
 	}
 
 	return svcMap
 }
 
-func buildHTTPService(projectName string, cs ClassifiedService) map[string]any {
-	var containerPort uint16
-	if len(cs.Ports) > 0 {
-		containerPort = cs.Ports[0].Container
+func buildService(projectName string, cs ClassifiedService) map[string]any {
+	svc := map[string]any{}
+
+	// Find the first HTTP port for Traefik routing.
+	var httpPort uint16
+	hasHTTP := false
+	for _, cp := range cs.ClassifiedPorts {
+		if cp.Kind == KindHTTP {
+			httpPort = cp.ContainerPort
+			hasHTTP = true
+			break
+		}
 	}
 
-	return map[string]any{
-		"labels":   traefik.Labels(projectName, cs.Name, containerPort),
-		"networks": []string{traefik.NetworkName()},
-	}
-}
-
-func buildTCPService(cs ClassifiedService) map[string]any {
-	if cs.HostPort == 0 || cs.ContainerPort == 0 {
-		return map[string]any{}
+	if hasHTTP {
+		svc["labels"] = traefik.Labels(projectName, cs.Name, httpPort)
+		svc["networks"] = []string{traefik.NetworkName()}
 	}
 
-	return map[string]any{
-		"ports": overrideSeq{
-			{
-				"target":    cs.ContainerPort,
-				"published": cs.HostPort,
+	// Collect TCP port remappings.
+	var tcpEntries overrideSeq
+	for _, cp := range cs.ClassifiedPorts {
+		if cp.Kind == KindTCP && cp.HostPort > 0 && cp.ContainerPort > 0 {
+			tcpEntries = append(tcpEntries, map[string]any{
+				"target":    cp.ContainerPort,
+				"published": cp.HostPort,
 				"protocol":  "tcp",
 				"mode":      "host",
-			},
-		},
+			})
+		}
 	}
+	if len(tcpEntries) > 0 {
+		svc["ports"] = tcpEntries
+	}
+
+	return svc
 }
 
 // overrideSeq marshals as a YAML sequence with the !override tag.

@@ -117,22 +117,25 @@ func handlePs(ctx context.Context, flags globalFlags, args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 3, ' ', 0)
 	fmt.Fprintln(w, "SERVICE\tTYPE\tURL/PORT\tSTATUS")
 	for _, cs := range classified {
-		var urlPort string
-		switch cs.Kind {
-		case override.KindHTTP:
-			urlPort = fmt.Sprintf(
-				"http://%s.%s.localhost", cs.Name, proj.Name,
-			)
-		case override.KindTCP:
-			if cs.HostPort > 0 {
+		status := statuses[cs.Name]
+		for _, cp := range cs.ClassifiedPorts {
+			var urlPort string
+			switch cp.Kind {
+			case override.KindHTTP:
 				urlPort = fmt.Sprintf(
-					"localhost:%d → %d", cs.HostPort, cs.ContainerPort,
+					"http://%s.%s.localhost", cs.Name, proj.Name,
 				)
+			case override.KindTCP:
+				if cp.HostPort > 0 {
+					urlPort = fmt.Sprintf(
+						"localhost:%d → %d", cp.HostPort, cp.ContainerPort,
+					)
+				}
 			}
+			fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
+				cs.Name, cp.Kind, urlPort, status,
+			)
 		}
-		fmt.Fprintf(w, "%s\t%s\t%s\t%s\n",
-			cs.Name, cs.Kind, urlPort, statuses[cs.Name],
-		)
 	}
 	if err := w.Flush(); err != nil {
 		return fmt.Errorf("flushing output: %w", err)
