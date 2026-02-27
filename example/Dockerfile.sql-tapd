@@ -1,0 +1,14 @@
+FROM alpine AS build
+
+ARG SQL_TAP_VERSION=0.2.5
+ARG TARGETARCH
+
+ADD https://github.com/mickamy/sql-tap/releases/download/v${SQL_TAP_VERSION}/sql-tap_${SQL_TAP_VERSION}_linux_${TARGETARCH}.tar.gz /tmp/sql-tap.tar.gz
+RUN tar -xzf /tmp/sql-tap.tar.gz -C /usr/local/bin sql-tapd && rm /tmp/sql-tap.tar.gz
+
+FROM gcr.io/distroless/static-debian12
+
+COPY --from=build /usr/local/bin/sql-tapd /usr/local/bin/sql-tapd
+COPY --from=busybox:stable-musl /bin/wget /usr/bin/wget
+
+ENTRYPOINT ["/usr/local/bin/sql-tapd"]

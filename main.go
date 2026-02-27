@@ -78,7 +78,7 @@ Usage:
 Commands:
   up       Start services with Traefik routing and deterministic ports
   down     Stop services
-  ps       Show services with URLs and port mappings
+  ps       Show services with URLs and port mappings (--json for JSON output)
 
 Any other command is forwarded to docker compose as-is.
   e.g.  tug logs -f api

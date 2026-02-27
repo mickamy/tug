@@ -1,0 +1,5 @@
+services:
+  sql-tap:
+    ports:
+      8081: http
+      9091: tcp

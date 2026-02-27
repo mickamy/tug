@@ -1,0 +1,42 @@
+name: tug-example
+
+services:
+  api:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+
+  web:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+
+  sql-tap:
+    build:
+      context: .
+      dockerfile: Dockerfile.sql-tapd
+    environment:
+      - DATABASE_URL=postgres://postgres:password@postgres:5432/postgres?sslmode=disable
+    command:
+      - --driver=postgres
+      - --listen=:5433
+      - --upstream=postgres:5432
+      - --grpc=:9091
+      - --http=:8081
+    ports:
+      - "8081:8081"
+      - "9091:9091"
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: password
+
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"

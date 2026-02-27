@@ -22,7 +22,8 @@ type Command struct {
 
 // ServiceConfig holds per-service overrides.
 type ServiceConfig struct {
-	Kind string `yaml:"kind"` // "http" or "tcp"
+	Kind  string            `yaml:"kind"`  // default kind: "http" or "tcp"
+	Ports map[uint16]string `yaml:"ports"` // per-port kind override: containerPort → "http" | "tcp"
 }
 
 var validKinds = map[string]struct{}{
@@ -39,6 +40,11 @@ func (s *ServiceConfig) UnmarshalYAML(unmarshal func(any) error) error {
 	}
 	if _, ok := validKinds[v.Kind]; !ok {
 		return fmt.Errorf("invalid service kind %q (must be \"http\" or \"tcp\")", v.Kind)
+	}
+	for p, k := range v.Ports {
+		if _, ok := validKinds[k]; !ok || k == "" {
+			return fmt.Errorf("invalid kind %q for port %d (must be \"http\" or \"tcp\")", k, p)
+		}
 	}
 	*s = ServiceConfig(v)
 	return nil
@@ -58,7 +64,7 @@ func defaults() Config {
 	}
 }
 
-// Load reads config from tug.yaml in projectDir (project-local) and globalPath (global),
+// Load reads config from .tug.yaml in projectDir (project-local) and globalPath (global),
 // merging with project-local taking priority over global.
 // Both files are optional; missing files are silently ignored.
 func Load(projectDir, globalPath string) (Config, error) {
@@ -72,7 +78,7 @@ func Load(projectDir, globalPath string) (Config, error) {
 		merge(&cfg, global)
 	}
 
-	local, err := loadFile(filepath.Join(projectDir, "tug.yaml"))
+	local, err := loadFile(filepath.Join(projectDir, ".tug.yaml"))
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return cfg, err
 	}
@@ -122,6 +128,16 @@ func merge(base *Config, override Config) {
 		if base.Services == nil {
 			base.Services = make(map[string]ServiceConfig)
 		}
-		base.Services[name] = svc
+		existing := base.Services[name]
+		if svc.Kind != "" {
+			existing.Kind = svc.Kind
+		}
+		for p, k := range svc.Ports {
+			if existing.Ports == nil {
+				existing.Ports = make(map[uint16]string)
+			}
+			existing.Ports[p] = k
+		}
+		base.Services[name] = existing
 	}
 }

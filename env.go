@@ -60,6 +60,13 @@ func configure(flags globalFlags) (env, error) {
 	}, nil
 }
 
+// tugActive reports whether tug is currently managing services
+// (i.e. a previous "tug up" generated the override file).
+func tugActive() bool {
+	_, err := os.Stat(overridePath)
+	return err == nil
+}
+
 // runFileArgs builds -f flags for the effective base and tug override.
 func runFileArgs(base string) []string {
 	args := []string{"-f", base}

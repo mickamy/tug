@@ -26,8 +26,11 @@ func TestClassify_HTTP(t *testing.T) {
 	if len(result) != 1 {
 		t.Fatalf("got %d services, want 1", len(result))
 	}
-	if result[0].Kind != override.KindHTTP {
-		t.Errorf("kind: got %d, want KindHTTP", result[0].Kind)
+	if len(result[0].ClassifiedPorts) != 1 {
+		t.Fatalf("got %d ports, want 1", len(result[0].ClassifiedPorts))
+	}
+	if result[0].ClassifiedPorts[0].Kind != override.KindHTTP {
+		t.Errorf("kind: got %v, want KindHTTP", result[0].ClassifiedPorts[0].Kind)
 	}
 }
 
@@ -61,11 +64,12 @@ func TestClassify_TCP_ByPort(t *testing.T) {
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
-			if result[0].Kind != override.KindTCP {
+			cp := result[0].ClassifiedPorts[0]
+			if cp.Kind != override.KindTCP {
 				t.Errorf("port %d: got KindHTTP, want KindTCP", tt.containerPort)
 			}
-			if result[0].HostPort < 10000 || result[0].HostPort >= 60000 {
-				t.Errorf("host port %d out of range", result[0].HostPort)
+			if cp.HostPort < 10000 || cp.HostPort >= 60000 {
+				t.Errorf("host port %d out of range", cp.HostPort)
 			}
 		})
 	}
@@ -85,7 +89,7 @@ func TestClassify_TCP_CustomImage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result[0].Kind != override.KindTCP {
+	if result[0].ClassifiedPorts[0].Kind != override.KindTCP {
 		t.Error("custom image with well-known port should be KindTCP")
 	}
 }
@@ -111,11 +115,12 @@ func TestClassify_ConfigOverride_TCP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result[0].Kind != override.KindTCP {
+	cp := result[0].ClassifiedPorts[0]
+	if cp.Kind != override.KindTCP {
 		t.Error("config override to tcp should take effect")
 	}
-	if result[0].ContainerPort != 9090 {
-		t.Errorf("container port: got %d, want 9090", result[0].ContainerPort)
+	if cp.ContainerPort != 9090 {
+		t.Errorf("container port: got %d, want 9090", cp.ContainerPort)
 	}
 }
 
@@ -140,8 +145,123 @@ func TestClassify_ConfigOverride_HTTP(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if result[0].Kind != override.KindHTTP {
+	if result[0].ClassifiedPorts[0].Kind != override.KindHTTP {
 		t.Error("config override to http should take effect")
+	}
+}
+
+func TestClassify_NoPorts_RespectsConfigKind(t *testing.T) {
+	t.Parallel()
+
+	proj := compose.Project{
+		Name: "myapp",
+		Services: []compose.Service{
+			{Name: "worker", Image: "worker:latest"},
+		},
+	}
+
+	cfg := config.Config{
+		Services: map[string]config.ServiceConfig{
+			"worker": {Kind: "tcp"},
+		},
+	}
+
+	result, err := override.Classify(proj, cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].ClassifiedPorts[0].Kind != override.KindTCP {
+		t.Error("service with no ports and kind=tcp should be KindTCP")
+	}
+}
+
+func TestClassify_PerPortOverride(t *testing.T) {
+	t.Parallel()
+
+	proj := compose.Project{
+		Name: "myapp",
+		Services: []compose.Service{
+			{
+				Name:  "sql-tap",
+				Image: "ghcr.io/mickamy/sql-tapd:latest",
+				Ports: []compose.Port{
+					{Host: 8081, Container: 8081},
+					{Host: 9091, Container: 9091},
+				},
+			},
+		},
+	}
+
+	cfg := config.Config{
+		Services: map[string]config.ServiceConfig{
+			"sql-tap": {
+				Ports: map[uint16]string{
+					8081: "http",
+					9091: "tcp",
+				},
+			},
+		},
+	}
+
+	result, err := override.Classify(proj, cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cps := result[0].ClassifiedPorts
+	if len(cps) != 2 {
+		t.Fatalf("got %d ports, want 2", len(cps))
+	}
+	if cps[0].Kind != override.KindHTTP {
+		t.Errorf("port 8081: got %v, want KindHTTP", cps[0].Kind)
+	}
+	if cps[1].Kind != override.KindTCP {
+		t.Errorf("port 9091: got %v, want KindTCP", cps[1].Kind)
+	}
+	if cps[1].HostPort < 10000 || cps[1].HostPort >= 60000 {
+		t.Errorf("host port %d out of range", cps[1].HostPort)
+	}
+}
+
+func TestClassify_PerPortOverridesServiceKind(t *testing.T) {
+	t.Parallel()
+
+	proj := compose.Project{
+		Name: "myapp",
+		Services: []compose.Service{
+			{
+				Name:  "proxy",
+				Image: "myproxy",
+				Ports: []compose.Port{
+					{Host: 8080, Container: 8080},
+					{Host: 5432, Container: 5432},
+				},
+			},
+		},
+	}
+
+	cfg := config.Config{
+		Services: map[string]config.ServiceConfig{
+			"proxy": {
+				Kind: "tcp", // default
+				Ports: map[uint16]string{
+					8080: "http", // override for this port
+				},
+			},
+		},
+	}
+
+	result, err := override.Classify(proj, cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cps := result[0].ClassifiedPorts
+	if cps[0].Kind != override.KindHTTP {
+		t.Errorf("port 8080: got %v, want KindHTTP (per-port override)", cps[0].Kind)
+	}
+	if cps[1].Kind != override.KindTCP {
+		t.Errorf("port 5432: got %v, want KindTCP (service-level default)", cps[1].Kind)
 	}
 }
 
@@ -163,8 +283,9 @@ func TestClassify_DeterministicPort(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if a[0].HostPort != b[0].HostPort {
-		t.Errorf("expected deterministic port, got %d and %d", a[0].HostPort, b[0].HostPort)
+	if a[0].ClassifiedPorts[0].HostPort != b[0].ClassifiedPorts[0].HostPort {
+		t.Errorf("expected deterministic port, got %d and %d",
+			a[0].ClassifiedPorts[0].HostPort, b[0].ClassifiedPorts[0].HostPort)
 	}
 }
 
@@ -222,6 +343,64 @@ func TestGenerate_TCP(t *testing.T) {
 	for _, want := range []string{
 		"!override",
 		"target: 5432",
+		"protocol: tcp",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in output:\n%s", want, out)
+		}
+	}
+}
+
+func TestGenerate_MixedHTTPAndTCP(t *testing.T) {
+	t.Parallel()
+
+	proj := compose.Project{
+		Name: "myapp",
+		Services: []compose.Service{
+			{
+				Name:  "sql-tap",
+				Image: "ghcr.io/mickamy/sql-tapd:latest",
+				Ports: []compose.Port{
+					{Host: 8081, Container: 8081},
+					{Host: 9091, Container: 9091},
+				},
+			},
+		},
+	}
+	cfg := config.Config{
+		Services: map[string]config.ServiceConfig{
+			"sql-tap": {
+				Ports: map[uint16]string{
+					8081: "http",
+					9091: "tcp",
+				},
+			},
+		},
+	}
+	classified, err := override.Classify(proj, cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	data, err := override.Generate(proj, classified)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	out := string(data)
+	// Should have Traefik labels for HTTP port.
+	for _, want := range []string{
+		"traefik.enable=true",
+		"sql-tap.myapp.localhost",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q in output:\n%s", want, out)
+		}
+	}
+	// Should have TCP port remapping.
+	for _, want := range []string{
+		"!override",
+		"target: 9091",
 		"protocol: tcp",
 	} {
 		if !strings.Contains(out, want) {
