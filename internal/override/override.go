@@ -84,7 +84,11 @@ func classifyPorts(svc compose.Service, cfg config.Config) []ClassifiedPort {
 	sc := cfg.Services[svc.Name]
 
 	if len(svc.Ports) == 0 {
-		return []ClassifiedPort{{Kind: KindHTTP}}
+		kind := KindHTTP
+		if sc.Kind == "tcp" {
+			kind = KindTCP
+		}
+		return []ClassifiedPort{{Kind: kind}}
 	}
 
 	cps := make([]ClassifiedPort, len(svc.Ports))

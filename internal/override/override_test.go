@@ -150,6 +150,31 @@ func TestClassify_ConfigOverride_HTTP(t *testing.T) {
 	}
 }
 
+func TestClassify_NoPorts_RespectsConfigKind(t *testing.T) {
+	t.Parallel()
+
+	proj := compose.Project{
+		Name: "myapp",
+		Services: []compose.Service{
+			{Name: "worker", Image: "worker:latest"},
+		},
+	}
+
+	cfg := config.Config{
+		Services: map[string]config.ServiceConfig{
+			"worker": {Kind: "tcp"},
+		},
+	}
+
+	result, err := override.Classify(proj, cfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result[0].ClassifiedPorts[0].Kind != override.KindTCP {
+		t.Error("service with no ports and kind=tcp should be KindTCP")
+	}
+}
+
 func TestClassify_PerPortOverride(t *testing.T) {
 	t.Parallel()
 
