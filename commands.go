@@ -10,6 +10,7 @@ import (
 	"text/tabwriter"
 
 	"github.com/mickamy/tug/internal/compose"
+	"github.com/mickamy/tug/internal/config"
 	"github.com/mickamy/tug/internal/exec"
 	"github.com/mickamy/tug/internal/merge"
 	"github.com/mickamy/tug/internal/override"
@@ -98,6 +99,7 @@ func handleDown(ctx context.Context, flags globalFlags, args []string) error {
 
 func handlePs(ctx context.Context, flags globalFlags, args []string) error {
 	if !tugActive() {
+		fmt.Fprintln(os.Stderr, "tug: not active (run \"tug up\" first)")
 		return nil
 	}
 
@@ -202,6 +204,21 @@ func writePsJSON(rows []psRow) error {
 	if err := enc.Encode(rows); err != nil {
 		return fmt.Errorf("encoding JSON: %w", err)
 	}
+	return nil
+}
+
+func handlePrune(ctx context.Context) error {
+	cfg, err := config.LoadDefault()
+	if err != nil {
+		return fmt.Errorf("loading config: %w", err)
+	}
+	if err := traefik.Stop(ctx, exec.New(cfg)); err != nil {
+		return fmt.Errorf("stopping traefik: %w", err)
+	}
+	// Clean up generated files so stale state doesn't leak into future runs.
+	_ = os.Remove(mergedPath)
+	_ = os.Remove(overridePath)
+	_ = os.Remove(tugDir)
 	return nil
 }
 

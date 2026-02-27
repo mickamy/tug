@@ -59,6 +59,8 @@ func run() int {
 		err = handleDown(ctx, flags, rest[1:])
 	case "ps":
 		err = handlePs(ctx, flags, rest[1:])
+	case "prune":
+		err = handlePrune(ctx)
 	default:
 		err = passthrough(ctx, flags, rest)
 	}
@@ -79,6 +81,7 @@ Commands:
   up       Start services with Traefik routing and deterministic ports
   down     Stop services
   ps       Show services with URLs and port mappings (--json for JSON output)
+  prune    Stop and remove the Traefik container and tug network
 
 Any other command is forwarded to docker compose as-is.
   e.g.  tug logs -f api

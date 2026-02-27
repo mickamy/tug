@@ -73,3 +73,19 @@ func EnsureRunning(ctx context.Context, runner exec.Runner) error {
 	}
 	return nil
 }
+
+// Stop removes the tug-traefik container and the tug network.
+// It is idempotent — calling it when resources do not exist is not an error.
+// Network removal failures are always ignored (other containers may be attached).
+func Stop(ctx context.Context, runner exec.Runner) error {
+	_, err := runner.RuntimeOutput(ctx, "rm", "-f", containerName)
+	if err != nil {
+		// "No such container" is expected when already removed; ignore.
+		if !strings.Contains(err.Error(), "No such container") {
+			return fmt.Errorf("removing traefik container: %w", err)
+		}
+	}
+	// Network removal may fail if other containers are still attached; ignore.
+	_ = runner.Runtime(ctx, "network", "rm", networkName)
+	return nil
+}
