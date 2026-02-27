@@ -87,7 +87,7 @@ func (r *runner) output(ctx context.Context, command string, args []string) ([]b
 	cmdArgs = append(cmdArgs, baseArgs...)
 	cmdArgs = append(cmdArgs, args...)
 	cmd := exec.CommandContext(ctx, bin, cmdArgs...) //nolint:gosec // command comes from user config, not untrusted input
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return out, fmt.Errorf("exec %s: %w", bin, err)
 	}
