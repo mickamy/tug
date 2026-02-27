@@ -110,6 +110,25 @@ func TestLoad_ServiceOverrides(t *testing.T) {
 	}
 }
 
+func TestLoad_InvalidKind(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	if err := os.WriteFile(
+		filepath.Join(dir, "tug.yaml"),
+		[]byte("services:\n  db:\n    kind: udp\n"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := config.Load(dir, filepath.Join(dir, "nonexistent"))
+	if err == nil {
+		t.Fatal("expected error for invalid kind, got nil")
+	}
+}
+
 func TestLoad_MalformedYAML(t *testing.T) {
 	t.Parallel()
 

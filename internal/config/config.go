@@ -25,6 +25,25 @@ type ServiceConfig struct {
 	Kind string `yaml:"kind"` // "http" or "tcp"
 }
 
+var validKinds = map[string]struct{}{
+	"":     {},
+	"http": {},
+	"tcp":  {},
+}
+
+func (s *ServiceConfig) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	type raw ServiceConfig // avoid recursion
+	var v raw
+	if err := unmarshal(&v); err != nil {
+		return err
+	}
+	if _, ok := validKinds[v.Kind]; !ok {
+		return fmt.Errorf("invalid service kind %q (must be \"http\" or \"tcp\")", v.Kind)
+	}
+	*s = ServiceConfig(v)
+	return nil
+}
+
 type Config struct {
 	Command  Command                  `yaml:"command"`
 	Services map[string]ServiceConfig `yaml:"services"`
