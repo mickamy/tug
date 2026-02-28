@@ -13,6 +13,7 @@ import (
 const (
 	DefaultComposeCommand = "docker compose"
 	DefaultRuntimeCommand = "docker"
+	DefaultTraefikPort    = 80
 )
 
 type Command struct {
@@ -50,8 +51,15 @@ func (s *ServiceConfig) UnmarshalYAML(unmarshal func(any) error) error {
 	return nil
 }
 
+// Traefik holds configuration for the Traefik reverse proxy.
+type Traefik struct {
+	Port      uint16 `yaml:"port"`
+	Dashboard bool   `yaml:"dashboard"`
+}
+
 type Config struct {
 	Command  Command                  `yaml:"command"`
+	Traefik  Traefik                  `yaml:"traefik"`
 	Services map[string]ServiceConfig `yaml:"services"`
 }
 
@@ -60,6 +68,10 @@ func defaults() Config {
 		Command: Command{
 			Compose: DefaultComposeCommand,
 			Runtime: DefaultRuntimeCommand,
+		},
+		Traefik: Traefik{
+			Port:      DefaultTraefikPort,
+			Dashboard: false,
 		},
 	}
 }
@@ -123,6 +135,12 @@ func merge(base *Config, override Config) {
 	}
 	if override.Command.Runtime != "" {
 		base.Command.Runtime = override.Command.Runtime
+	}
+	if override.Traefik.Port != 0 {
+		base.Traefik.Port = override.Traefik.Port
+	}
+	if override.Traefik.Dashboard {
+		base.Traefik.Dashboard = true
 	}
 	for name, svc := range override.Services {
 		if base.Services == nil {

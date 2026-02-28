@@ -5,8 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"slices"
+	"strconv"
 	"text/tabwriter"
 
 	"github.com/mickamy/tug/internal/compose"
@@ -64,7 +66,7 @@ func handleUp(ctx context.Context, flags globalFlags, args []string) error {
 		return fmt.Errorf("writing override: %w", err)
 	}
 
-	if err := traefik.EnsureRunning(ctx, e.runner); err != nil {
+	if err := traefik.EnsureRunning(ctx, e.runner, e.cfg.Traefik); err != nil {
 		return fmt.Errorf("ensuring traefik: %w", err)
 	}
 
@@ -119,7 +121,7 @@ func handlePs(ctx context.Context, flags globalFlags, args []string) error {
 	}
 
 	statuses := containerStatuses(ctx, e.runner, e.composeFile)
-	rows := buildPsRows(proj, classified, statuses)
+	rows := buildPsRows(proj, classified, statuses, e.cfg.Traefik.Port)
 
 	if slices.Contains(args, "--json") {
 		return writePsJSON(rows)
@@ -155,6 +157,7 @@ func buildPsRows(
 	proj compose.Project,
 	classified []override.ClassifiedService,
 	statuses map[string]string,
+	traefikPort uint16,
 ) []psRow {
 	var rows []psRow
 	for _, cs := range classified {
@@ -163,9 +166,12 @@ func buildPsRows(
 			var urlPort string
 			switch cp.Kind {
 			case override.KindHTTP:
-				urlPort = fmt.Sprintf(
-					"http://%s.%s.localhost", cs.Name, proj.Name,
-				)
+				host := cs.Name + "." + proj.Name + ".localhost"
+				if traefikPort != 80 {
+					urlPort = "http://" + net.JoinHostPort(host, strconv.FormatUint(uint64(traefikPort), 10))
+				} else {
+					urlPort = "http://" + host
+				}
 			case override.KindTCP:
 				if cp.HostPort > 0 {
 					urlPort = fmt.Sprintf(

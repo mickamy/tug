@@ -23,6 +23,12 @@ func TestLoad_Defaults(t *testing.T) {
 	if cfg.Command.Runtime != config.DefaultRuntimeCommand {
 		t.Errorf("runtime: got %q, want %q", cfg.Command.Runtime, config.DefaultRuntimeCommand)
 	}
+	if cfg.Traefik.Port != config.DefaultTraefikPort {
+		t.Errorf("traefik port: got %d, want %d", cfg.Traefik.Port, config.DefaultTraefikPort)
+	}
+	if cfg.Traefik.Dashboard {
+		t.Error("traefik dashboard: got true, want false")
+	}
 }
 
 func TestLoad_LocalOverridesGlobal(t *testing.T) {
@@ -64,6 +70,70 @@ func TestLoad_LocalOverridesGlobal(t *testing.T) {
 	}
 	if cfg.Command.Runtime != "global-runtime" {
 		t.Errorf("runtime: got %q, want %q", cfg.Command.Runtime, "global-runtime")
+	}
+}
+
+func TestLoad_TraefikLocalOverridesGlobal(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	globalDir := filepath.Join(dir, "global")
+	if err := os.MkdirAll(globalDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	globalPath := filepath.Join(globalDir, "tug.yaml")
+	if err := os.WriteFile(
+		globalPath,
+		[]byte("traefik:\n  port: 8080\n"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	localDir := filepath.Join(dir, "project")
+	if err := os.MkdirAll(localDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(localDir, ".tug.yaml"),
+		[]byte("traefik:\n  port: 9090\n"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.Load(localDir, globalPath)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Traefik.Port != 9090 {
+		t.Errorf("traefik port: got %d, want 9090", cfg.Traefik.Port)
+	}
+}
+
+func TestLoad_TraefikDashboardOptIn(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+
+	if err := os.WriteFile(
+		filepath.Join(dir, ".tug.yaml"),
+		[]byte("traefik:\n  dashboard: true\n"),
+		0o600,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := config.Load(dir, filepath.Join(dir, "nonexistent"))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cfg.Traefik.Dashboard {
+		t.Error("traefik dashboard: got false, want true")
+	}
+	if cfg.Traefik.Port != config.DefaultTraefikPort {
+		t.Errorf("traefik port: got %d, want %d", cfg.Traefik.Port, config.DefaultTraefikPort)
 	}
 }
 
