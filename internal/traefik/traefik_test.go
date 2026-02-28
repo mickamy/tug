@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/mickamy/tug/internal/config"
 	"github.com/mickamy/tug/internal/traefik"
 )
 
@@ -138,7 +139,7 @@ func TestEnsureRunning_AlreadyRunning(t *testing.T) {
 		},
 	}
 
-	if err := traefik.EnsureRunning(t.Context(), m); err != nil {
+	if err := traefik.EnsureRunning(t.Context(), m, config.Traefik{Port: 80}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(m.runtimeCalls) != 0 {
@@ -162,7 +163,7 @@ func TestEnsureRunning_ContainerNotExist_Starts(t *testing.T) {
 		},
 	}
 
-	if err := traefik.EnsureRunning(t.Context(), m); err != nil {
+	if err := traefik.EnsureRunning(t.Context(), m, config.Traefik{Port: 80}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Should only call "run" (no "rm" since inspect failed)
@@ -190,7 +191,7 @@ func TestEnsureRunning_StoppedContainer_RemovesAndStarts(t *testing.T) {
 		},
 	}
 
-	if err := traefik.EnsureRunning(t.Context(), m); err != nil {
+	if err := traefik.EnsureRunning(t.Context(), m, config.Traefik{Port: 80}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	// Should call "rm" then "run"
@@ -225,12 +226,90 @@ func TestEnsureRunning_StartFails(t *testing.T) {
 		},
 	}
 
-	err := traefik.EnsureRunning(t.Context(), m)
+	err := traefik.EnsureRunning(t.Context(), m, config.Traefik{Port: 80})
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 	if !strings.Contains(err.Error(), "image pull failed") {
 		t.Errorf("expected 'image pull failed' in error, got %v", err)
+	}
+}
+
+func TestEnsureRunning_CustomPort(t *testing.T) {
+	t.Parallel()
+
+	call := 0
+	m := &mockRunner{
+		runtimeOutputFunc: func(_ []string) ([]byte, error) {
+			call++
+			if call == 1 {
+				return []byte("{}"), nil
+			}
+			return nil, errors.New("no such container")
+		},
+	}
+
+	if err := traefik.EnsureRunning(t.Context(), m, config.Traefik{Port: 8080}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(m.runtimeCalls) != 1 {
+		t.Fatalf("expected 1 Runtime call, got %d: %v", len(m.runtimeCalls), m.runtimeCalls)
+	}
+	args := strings.Join(m.runtimeCalls[0], " ")
+	if !strings.Contains(args, "127.0.0.1:8080:80") {
+		t.Errorf("expected port binding '127.0.0.1:8080:80' in args, got %q", args)
+	}
+}
+
+func TestEnsureRunning_DashboardEnabled(t *testing.T) {
+	t.Parallel()
+
+	call := 0
+	m := &mockRunner{
+		runtimeOutputFunc: func(_ []string) ([]byte, error) {
+			call++
+			if call == 1 {
+				return []byte("{}"), nil
+			}
+			return nil, errors.New("no such container")
+		},
+	}
+
+	if err := traefik.EnsureRunning(t.Context(), m, config.Traefik{Port: 80, Dashboard: true}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(m.runtimeCalls) != 1 {
+		t.Fatalf("expected 1 Runtime call, got %d: %v", len(m.runtimeCalls), m.runtimeCalls)
+	}
+	args := strings.Join(m.runtimeCalls[0], " ")
+	if !strings.Contains(args, "--api.insecure=true") {
+		t.Errorf("expected '--api.insecure=true' in args, got %q", args)
+	}
+}
+
+func TestEnsureRunning_DashboardDisabled(t *testing.T) {
+	t.Parallel()
+
+	call := 0
+	m := &mockRunner{
+		runtimeOutputFunc: func(_ []string) ([]byte, error) {
+			call++
+			if call == 1 {
+				return []byte("{}"), nil
+			}
+			return nil, errors.New("no such container")
+		},
+	}
+
+	if err := traefik.EnsureRunning(t.Context(), m, config.Traefik{Port: 80, Dashboard: false}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(m.runtimeCalls) != 1 {
+		t.Fatalf("expected 1 Runtime call, got %d: %v", len(m.runtimeCalls), m.runtimeCalls)
+	}
+	args := strings.Join(m.runtimeCalls[0], " ")
+	if strings.Contains(args, "--api.insecure") {
+		t.Errorf("expected no '--api.insecure' in args, got %q", args)
 	}
 }
 

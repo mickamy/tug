@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mickamy/tug/internal/config"
 	"github.com/mickamy/tug/internal/exec"
 )
 
@@ -38,7 +39,7 @@ func EnsureNetwork(ctx context.Context, runner exec.Runner) error {
 }
 
 // EnsureRunning starts the tug-traefik container if it is not already running.
-func EnsureRunning(ctx context.Context, runner exec.Runner) error {
+func EnsureRunning(ctx context.Context, runner exec.Runner, cfg config.Traefik) error {
 	if err := EnsureNetwork(ctx, runner); err != nil {
 		return fmt.Errorf("ensuring network: %w", err)
 	}
@@ -56,19 +57,25 @@ func EnsureRunning(ctx context.Context, runner exec.Runner) error {
 		_ = runner.Runtime(ctx, "rm", "-f", containerName)
 	}
 
-	if err := runner.Runtime(ctx,
+	runArgs := []string{
 		"run", "-d",
 		"--name", containerName,
 		"--network", networkName,
 		"--restart=unless-stopped",
-		"-p", "127.0.0.1:80:80",
+		"-p", fmt.Sprintf("127.0.0.1:%d:80", cfg.Port),
 		"-v", "/var/run/docker.sock:/var/run/docker.sock:ro",
 		traefikImage,
-		"--api.insecure=true",
+	}
+	if cfg.Dashboard {
+		runArgs = append(runArgs, "--api.insecure=true")
+	}
+	runArgs = append(runArgs,
 		"--providers.docker=true",
 		"--providers.docker.exposedByDefault=false",
 		"--providers.docker.network="+networkName,
-	); err != nil {
+	)
+
+	if err := runner.Runtime(ctx, runArgs...); err != nil {
 		return fmt.Errorf("starting traefik: %w", err)
 	}
 	return nil
