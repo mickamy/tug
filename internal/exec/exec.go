@@ -46,7 +46,7 @@ func (r *runner) Runtime(ctx context.Context, args ...string) error {
 // RuntimeSilent runs a runtime command, suppressing stdout while streaming
 // stderr to the terminal. Returns captured stdout so callers can inspect it on
 // error. Use this instead of RuntimeOutput when the command may produce
-// progress output on stderr (e.g. image pulls).
+// progress output on stdout (e.g. image pulls).
 func (r *runner) RuntimeSilent(ctx context.Context, args ...string) ([]byte, error) {
 	return r.silent(ctx, r.cfg.Command.Runtime, args)
 }
