@@ -32,7 +32,7 @@ func EnsureNetwork(ctx context.Context, runner exec.Runner) error {
 	if !strings.Contains(msg, "No such network") && !strings.Contains(msg, "not found") {
 		return fmt.Errorf("inspecting network: %w", err)
 	}
-	if err := runner.Runtime(ctx, "network", "create", networkName); err != nil {
+	if _, err := runner.RuntimeSilent(ctx, "network", "create", networkName); err != nil {
 		return fmt.Errorf("creating network: %w", err)
 	}
 	return nil
@@ -54,7 +54,7 @@ func EnsureRunning(ctx context.Context, runner exec.Runner, cfg config.Traefik) 
 
 	// Remove stopped/dead container if it exists (inspect succeeded but not running).
 	if err == nil {
-		_ = runner.Runtime(ctx, "rm", "-f", containerName)
+		_, _ = runner.RuntimeOutput(ctx, "rm", "-f", containerName)
 	}
 
 	runArgs := []string{
@@ -75,7 +75,7 @@ func EnsureRunning(ctx context.Context, runner exec.Runner, cfg config.Traefik) 
 		"--providers.docker.network="+networkName,
 	)
 
-	if err := runner.Runtime(ctx, runArgs...); err != nil {
+	if _, err := runner.RuntimeSilent(ctx, runArgs...); err != nil {
 		return fmt.Errorf("starting traefik: %w", err)
 	}
 	return nil
@@ -95,6 +95,6 @@ func Stop(ctx context.Context, runner exec.Runner) error {
 		}
 	}
 	// Network removal may fail if other containers are still attached; ignore.
-	_ = runner.Runtime(ctx, "network", "rm", networkName)
+	_, _ = runner.RuntimeOutput(ctx, "network", "rm", networkName)
 	return nil
 }

@@ -17,6 +17,7 @@ type mockRunner struct {
 
 func (m *mockRunner) Compose(_ context.Context, _ ...string) error                 { return nil }
 func (m *mockRunner) Runtime(_ context.Context, _ ...string) error                 { return nil }
+func (m *mockRunner) RuntimeSilent(_ context.Context, _ ...string) ([]byte, error) { return nil, nil }
 func (m *mockRunner) RuntimeOutput(_ context.Context, _ ...string) ([]byte, error) { return nil, nil }
 func (m *mockRunner) ComposeOutput(_ context.Context, args ...string) ([]byte, error) {
 	m.composeOutputArgs = args
