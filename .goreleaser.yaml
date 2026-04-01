@@ -33,5 +33,6 @@ brews:
       owner: mickamy
       name: homebrew-tap
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: Formula
 
 changelog: {}
