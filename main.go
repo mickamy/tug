@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"os/signal"
@@ -16,24 +15,14 @@ func main() {
 }
 
 func run() int {
-	var (
-		flags       globalFlags
-		showVersion bool
-	)
-
-	fs := flag.NewFlagSet("tug", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	fs.Usage = printUsage
-	fs.StringVar(&flags.composeFile, "f", "", "")
-	fs.StringVar(&flags.composeFile, "file", "", "")
-	fs.Var(&flags.overrideFiles, "override", "")
-	fs.BoolVar(&showVersion, "version", false, "")
-	fs.BoolVar(&showVersion, "v", false, "")
-
-	if err := fs.Parse(os.Args[1:]); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
+	flags, showVersion, rest, err := parseArgs(os.Args[1:])
+	if err != nil {
+		if errors.Is(err, errHelp) {
+			printUsage()
 			return 0
 		}
+		fmt.Fprintf(os.Stderr, "tug: %v\n", err)
+		printUsage()
 		return 1
 	}
 
@@ -42,7 +31,6 @@ func run() int {
 		return 0
 	}
 
-	rest := fs.Args()
 	if len(rest) == 0 {
 		printUsage()
 		return 0
@@ -51,7 +39,6 @@ func run() int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	var err error
 	switch rest[0] {
 	case "up":
 		err = handleUp(ctx, flags, rest[1:])

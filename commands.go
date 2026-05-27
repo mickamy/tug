@@ -70,7 +70,8 @@ func handleUp(ctx context.Context, flags globalFlags, args []string) error {
 		return fmt.Errorf("ensuring traefik: %w", err)
 	}
 
-	composeArgs := make([]string, 0, 5+len(args))
+	composeArgs := make([]string, 0, len(flags.passthrough)+5+len(args))
+	composeArgs = append(composeArgs, flags.passthrough...)
 	composeArgs = append(composeArgs, "-f", base, "-f", overridePath, "up")
 	composeArgs = append(composeArgs, args...)
 	if err := e.runner.Compose(ctx, composeArgs...); err != nil {
@@ -85,7 +86,8 @@ func handleDown(ctx context.Context, flags globalFlags, args []string) error {
 		return err
 	}
 
-	composeArgs := runFileArgs(e.composeFile)
+	composeArgs := append([]string{}, flags.passthrough...)
+	composeArgs = append(composeArgs, runFileArgs(e.composeFile)...)
 	composeArgs = append(composeArgs, "down")
 	composeArgs = append(composeArgs, args...)
 	if err := e.runner.Compose(ctx, composeArgs...); err != nil {
@@ -120,7 +122,7 @@ func handlePs(ctx context.Context, flags globalFlags, args []string) error {
 		return fmt.Errorf("classifying services: %w", err)
 	}
 
-	statuses := containerStatuses(ctx, e.runner, e.composeFile)
+	statuses := containerStatuses(ctx, e.runner, flags.passthrough, e.composeFile)
 	rows := buildPsRows(proj, classified, statuses, e.cfg.Traefik.Port)
 
 	if slices.Contains(args, "--json") {
@@ -135,7 +137,8 @@ func passthrough(ctx context.Context, flags globalFlags, args []string) error {
 		return err
 	}
 
-	composeArgs := runFileArgs(e.composeFile)
+	composeArgs := append([]string{}, flags.passthrough...)
+	composeArgs = append(composeArgs, runFileArgs(e.composeFile)...)
 	composeArgs = append(composeArgs, args...)
 
 	cmd := args[0]
@@ -236,8 +239,9 @@ type psEntry struct {
 
 // containerStatuses queries docker compose ps and returns a service → state map.
 // Returns nil on error (e.g. no containers running).
-func containerStatuses(ctx context.Context, runner exec.Runner, base string) map[string]string {
-	args := runFileArgs(base)
+func containerStatuses(ctx context.Context, runner exec.Runner, globals []string, base string) map[string]string {
+	args := append([]string{}, globals...)
+	args = append(args, runFileArgs(base)...)
 	args = append(args, "ps", "--format", "json")
 	out, err := runner.ComposeOutput(ctx, args...)
 	if err != nil {
